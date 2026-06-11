@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ENIGMA SCAN</title>
+<style>
+  :root{
+    --bg:#0a0d0b;
+    --glass:rgba(96,148,118,0.07);
+    --glass-edge:rgba(120,170,140,0.16);
+    --ink:#9db8a6;
+    --ink-dim:#5c7263;
+    --ink-faint:#3a4a40;
+    --brass:#8a7a55;
+    --brass-dim:#5f5640;
+    --mono:'SF Mono',ui-monospace,'Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--mono);
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  #cv{position:fixed;inset:0;width:100%;height:100%;display:block}
+  video{position:fixed;width:1px;height:1px;opacity:0;pointer-events:none}
+
+  /* ---------- header : rotor windows ---------- */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:10;
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;
+    display:flex;align-items:center;justify-content:space-between;
+    background:linear-gradient(rgba(10,13,11,0.85),rgba(10,13,11,0.0));
+    pointer-events:none;
+  }
+  .brand{font-size:11px;letter-spacing:3px;color:var(--ink-dim)}
+  .brand b{color:var(--ink);font-weight:600}
+  .rotors{display:flex;gap:6px}
+  .rotor{
+    width:26px;height:34px;display:flex;align-items:center;justify-content:center;
+    font-size:16px;font-weight:600;color:var(--brass);
+    background:var(--glass);border:1px solid var(--glass-edge);border-radius:5px;
+    box-shadow:inset 0 6px 10px rgba(0,0,0,0.5);
+    position:relative;overflow:hidden;
+  }
+  .rotor::after{content:'';position:absolute;left:0;right:0;top:0;height:40%;
+    background:linear-gradient(rgba(255,255,255,0.05),transparent)}
+  .rotor.tick{animation:rstep .22s ease-out}
+  @keyframes rstep{0%{transform:translateY(-30%);opacity:.2}100%{transform:translateY(0);opacity:1}}
+  .stat{font-size:9px;letter-spacing:1.5px;color:var(--ink-faint);text-align:right;line-height:1.6}
+  .stat b{color:var(--ink-dim);font-weight:400}
+
+  /* ---------- bottom control rail ---------- */
+  nav{
+    position:fixed;left:0;right:0;bottom:0;z-index:10;
+    padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px);
+    display:flex;flex-direction:column;gap:8px;
+    background:linear-gradient(transparent,rgba(10,13,11,0.88) 40%);
+  }
+  .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .chip{
+    font-family:var(--mono);font-size:11px;letter-spacing:1.5px;
+    color:var(--ink-dim);background:var(--glass);
+    border:1px solid var(--glass-edge);border-radius:7px;
+    padding:9px 13px;cursor:pointer;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    transition:color .15s,border-color .15s;
+  }
+  .chip:active{transform:translateY(1px)}
+  .chip.on{color:var(--ink);border-color:rgba(140,190,158,0.45)}
+  .chip.warm{color:var(--brass)}
+  .slider-row{display:flex;align-items:center;gap:10px;justify-content:center}
+  .slider-row label{font-size:9px;letter-spacing:2px;color:var(--ink-faint);width:46px;text-align:right}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:min(200px,46vw);height:22px;background:transparent;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--ink-faint);border-radius:1px}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:16px;height:16px;border-radius:50%;margin-top:-7px;
+    background:var(--bg);border:1px solid var(--ink-dim);
+  }
+
+  #funk{
+    font-size:9px;letter-spacing:2.5px;color:var(--ink-faint);
+    text-align:center;white-space:nowrap;overflow:hidden;
+    padding:2px 0 4px;min-height:14px;
+  }
+
+  /* ---------- start gate ---------- */
+  #gate{
+    position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:18px;background:var(--bg);
+    transition:opacity .5s;text-align:center;padding:24px;
+  }
+  #gate.gone{opacity:0;pointer-events:none}
+  #gate h1{font-size:20px;letter-spacing:8px;color:var(--ink);font-weight:600}
+  #gate p{font-size:11px;line-height:1.9;letter-spacing:1px;color:var(--ink-dim);max-width:320px}
+  #gate .chip{font-size:13px;padding:13px 28px}
+  #gateNote{font-size:9px;color:var(--ink-faint);letter-spacing:1px;max-width:300px;line-height:1.8}
+  .keule{display:flex;gap:5px;margin-bottom:4px}
+  .keule span{width:30px;height:40px;display:flex;align-items:center;justify-content:center;
+    font-size:18px;color:var(--brass);background:var(--glass);
+    border:1px solid var(--glass-edge);border-radius:5px}
+  #toast{
+    position:fixed;top:calc(env(safe-area-inset-top,0px) + 58px);left:50%;transform:translateX(-50%);
+    z-index:15;font-size:10px;letter-spacing:1.5px;color:var(--ink-dim);
+    background:var(--glass);border:1px solid var(--glass-edge);border-radius:6px;
+    padding:7px 14px;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  }
+  #toast.show{opacity:1}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<video id="vid" playsinline muted autoplay></video>
+
+<header>
+  <div>
+    <div class="brand"><b>ENIGMA</b> SCAN</div>
+  </div>
+  <div class="rotors">
+    <div class="rotor" id="r1">A</div>
+    <div class="rotor" id="r2">A</div>
+    <div class="rotor" id="r3">A</div>
+  </div>
+  <div class="stat">FELD <b id="stFps">--</b> FPS<br>PUNKTE <b id="stPts">--</b></div>
+</header>
+
+<nav>
+  <div id="funk">— FUNKVERKEHR WIRD ABGEHÖRT —</div>
+  <div class="slider-row">
+    <label>TIEFE</label>
+    <input type="range" id="depthSl" min="0" max="100" value="55">
+    <label style="text-align:left" id="depthVal">55</label>
+  </div>
+  <div class="row">
+    <button class="chip" id="btnFreeze">FREEZE</button>
+    <button class="chip" id="btnTilt">TILT</button>
+    <button class="chip" id="btnInvert">INVERT</button>
+    <button class="chip" id="btnDensity">RASTER ·MED·</button>
+    <button class="chip warm" id="btnFlip">⟲ CAM</button>
+  </div>
+  <div class="row">
+    <button class="chip" id="btnMode">MODUS ROTOR</button>
+    <button class="chip on" id="btnEdge">KANTEN</button>
+    <button class="chip" id="btnSound">TON</button>
+    <button class="chip warm" id="btnShot">⬇ FOTO</button>
+  </div>
+</nav>
+
+<div id="toast"></div>
+
+<div id="gate">
+  <div class="keule"><span>E</span><span>S</span><span>C</span><span>A</span><span>N</span></div>
+  <h1>ENIGMA SCAN</h1>
+  <p>The camera becomes a depth probe. Every point of the scene is encrypted into a live rotor letter — freeze the field and tilt the phone to orbit the captured cloud.</p>
+  <button class="chip" id="btnStart">START SCAN</button>
+  <button class="chip" id="btnDemo" style="font-size:10px;color:var(--ink-faint)">DEMO MODE (NO CAMERA)</button>
+  <div id="gateNote">Camera needs HTTPS or a local server. On iPhone: Safari → allow camera → tap TILT once to enable motion.</div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   ENIGMA SCAN — pseudo-depth point cloud, glyphs from Rotor I
+   single file · vanilla JS · canvas 2D · glyph atlas renderer
+   ============================================================ */
+const ROTOR_I = 'EKMFLGDQVZNTOWYHXUSPAIBRCJ';
+const ALPHA   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const MORSE = ['.-','-...','-.-.','-..','.','..-.','--.','....','..','.---','-.-',
+  '.-..','--','-.','---','.--.','--.-','.-.','...','-','..-','...-','.--','-..-','-.--','--..'];
+const MODES = ['ROTOR','MORSE','LAMPEN'];
+
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const vid = document.getElementById('vid');
+
+const S = {
+  running:false, demo:false, frozen:false,
+  invert:false, tiltOn:false, facing:'environment',
+  mode:0, edgeOn:true, sndOn:false,
+  edge:null,
+  depth:0.55,            // depth strength 0..1
+  densityIdx:1,          // 0 lo, 1 med, 2 hi
+  cols:0, rows:0,
+  luma:null, zbuf:null,  // Float32: target luma + smoothed depth
+  step:0,                // global rotor step counter
+  rot:[0,0,0],           // rotor window positions
+  tilt:{x:0,y:0,tx:0,ty:0},
+  sweepY:-0.2,
+  dpr:Math.min(window.devicePixelRatio||1,2),
+  fps:0, frames:0, fT:performance.now(),
+};
+const DENSITY = [
+  {name:'·LO· ', cols:52},
+  {name:'·MED·', cols:72},
+  {name:'·HI· ', cols:96},
+];
+
+/* ---------- glyph atlas : 26 letters x 5 brightness tiers ---------- */
+const TIERS = 5;
+let atlas=null, CELL=28;
+const tierColor = t => {
+  // muted phosphor ramp — deliberately capped, never neon
+  const ramps = ['#22302a','#3a5246','#557a63','#79a589','#a3c7ae'];
+  return ramps[t];
+};
+function buildAtlas(){
+  atlas = document.createElement('canvas');
+  atlas.width = CELL*26; atlas.height = CELL*TIERS;
+  const a = atlas.getContext('2d');
+  const fam = getComputedStyle(document.body).fontFamily;
+  a.textAlign='center'; a.textBaseline='middle';
+  for(let t=0;t<TIERS;t++){
+    a.fillStyle = a.strokeStyle = tierColor(t);
+    for(let i=0;i<26;i++){
+      const ox=i*CELL, oy=t*CELL, cx2=ox+CELL/2, cy2=oy+CELL/2;
+      if(S.mode===0){                                   /* ROTOR letters */
+        a.font = `600 ${CELL*0.72}px ${fam}`;
+        a.fillText(ALPHA[i], cx2, cy2+1);
+      }else if(S.mode===1){                             /* MORSE pattern */
+        const m=MORSE[i];
+        let units=0; for(const s of m) units+=(s==='-'?3:1)+1;
+        units--;                                        /* no trailing gap */
+        const u=CELL*0.84/units; let x=ox+(CELL-units*u)/2;
+        const yMid=cy2, h=Math.max(2,u*0.9);
+        for(const s of m){
+          if(s==='-'){ a.fillRect(x, yMid-h/2, u*3-u*0.18, h); x+=u*4; }
+          else{ a.beginPath(); a.arc(x+u*0.41, yMid, Math.max(1.2,u*0.42), 0, 7); a.fill(); x+=u*2; }
+        }
+      }else{                                            /* LAMPEN board keys */
+        a.lineWidth=1.4;
+        a.beginPath(); a.arc(cx2, cy2, CELL*0.42, 0, 7); a.stroke();
+        a.globalAlpha=0.16; a.fill(); a.globalAlpha=1;
+        a.font = `600 ${CELL*0.46}px ${fam}`;
+        a.fillText(ALPHA[i], cx2, cy2+1);
+      }
+    }
+  }
+}
+
+/* ---------- sizing ---------- */
+function resize(){
+  cv.width  = innerWidth  * S.dpr;
+  cv.height = innerHeight * S.dpr;
+  const d = DENSITY[S.densityIdx];
+  S.cols = d.cols;
+  S.rows = Math.round(d.cols * innerHeight/innerWidth);
+  const n = S.cols*S.rows;
+  S.luma = new Float32Array(n);
+  S.zbuf = new Float32Array(n);
+  S.edge = new Float32Array(n);
+  samp.width=S.cols; samp.height=S.rows;
+  document.getElementById('stPts').textContent = n;
+}
+const samp = document.createElement('canvas');
+const sctx = samp.getContext('2d',{willReadFrequently:true});
+addEventListener('resize', resize);
+
+/* ---------- camera ---------- */
+async function startCam(){
+  try{
+    if(vid.srcObject) vid.srcObject.getTracks().forEach(t=>t.stop());
+    const st = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:S.facing, width:{ideal:640}}, audio:false
+    });
+    vid.srcObject = st; await vid.play();
+    S.demo=false; return true;
+  }catch(e){ return false; }
+}
+
+/* ---------- demo field (value noise) if no camera ---------- */
+function demoLuma(t){
+  const c=S.cols, r=S.rows;
+  for(let y=0;y<r;y++)for(let x=0;x<c;x++){
+    const u=x/c*6, v=y/r*6;
+    let n = Math.sin(u+t*0.7)*Math.cos(v-t*0.5)
+          + 0.5*Math.sin(u*2.3-t)*Math.sin(v*1.7+t*0.8)
+          + 0.25*Math.sin((u+v)*3.1+t*1.6);
+    S.luma[y*c+x] = Math.min(1,Math.max(0,(n+1.75)/3.5));
+  }
+}
+
+/* ---------- sample camera → luma grid ---------- */
+function sampleVideo(){
+  if(vid.readyState<2) return;
+  // mirror front cam
+  sctx.save();
+  if(S.facing==='user'){ sctx.translate(S.cols,0); sctx.scale(-1,1); }
+  sctx.drawImage(vid,0,0,S.cols,S.rows);
+  sctx.restore();
+  const px = sctx.getImageData(0,0,S.cols,S.rows).data;
+  for(let i=0,j=0;i<S.luma.length;i++,j+=4)
+    S.luma[i] = (px[j]*0.299+px[j+1]*0.587+px[j+2]*0.114)/255;
+}
+
+/* ---------- sobel : contours push forward regardless of brightness ---------- */
+function sobel(){
+  const c=S.cols, r=S.rows, L=S.luma, E=S.edge;
+  for(let y=1;y<r-1;y++)for(let x=1;x<c-1;x++){
+    const i=y*c+x;
+    const gx = L[i-c+1]+2*L[i+1]+L[i+c+1] - L[i-c-1]-2*L[i-1]-L[i+c-1];
+    const gy = L[i+c-1]+2*L[i+c]+L[i+c+1] - L[i-c-1]-2*L[i-c]-L[i-c+1];
+    E[i] = Math.min(1, Math.sqrt(gx*gx+gy*gy)*1.15);
+  }
+}
+
+/* ---------- tilt ---------- */
+function onOrient(e){
+  // gamma: left/right, beta: front/back — small range, damped
+  S.tilt.tx = Math.max(-1,Math.min(1,(e.gamma||0)/35));
+  S.tilt.ty = Math.max(-1,Math.min(1,((e.beta||0)-45)/35));
+}
+async function enableTilt(){
+  try{
+    if(typeof DeviceOrientationEvent!=='undefined' &&
+       typeof DeviceOrientationEvent.requestPermission==='function'){
+      const r = await DeviceOrientationEvent.requestPermission();
+      if(r!=='granted'){ toast('MOTION DENIED'); return; }
+    }
+    addEventListener('deviceorientation', onOrient);
+    S.tiltOn=true; btnTilt.classList.add('on'); toast('TILT ACTIVE');
+  }catch(e){ toast('MOTION UNAVAILABLE'); }
+}
+/* desktop fallback: mouse parallax */
+addEventListener('pointermove', e=>{
+  if(S.tiltOn) return;
+  S.tilt.tx = (e.clientX/innerWidth -0.5)*1.6;
+  S.tilt.ty = (e.clientY/innerHeight-0.5)*1.6;
+});
+
+/* ---------- rotor odometer (header) ---------- */
+let lastRot=0;
+function stepRotors(t){
+  if(t-lastRot<450) return;
+  lastRot=t;
+  const el=[r1,r2,r3];
+  S.rot[2]=(S.rot[2]+1)%26;                 // right rotor every tick
+  bump(el[2],S.rot[2]); click(0.045,2300);
+  if(S.rot[2]===16){ S.rot[1]=(S.rot[1]+1)%26; bump(el[1],S.rot[1]); click(0.08,1500); // notch Q
+    if(S.rot[1]===4){ S.rot[0]=(S.rot[0]+1)%26; bump(el[0],S.rot[0]); click(0.1,1100); } } // notch E
+  tickFunk();
+}
+function bump(el,v){
+  el.textContent=ALPHA[v];
+  el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick');
+}
+
+/* ---------- render ---------- */
+function frame(t){
+  requestAnimationFrame(frame);
+  if(!S.running) return;
+
+  // acquire
+  if(!S.frozen){
+    if(S.demo) demoLuma(t/1000); else sampleVideo();
+    if(S.edgeOn) sobel();
+  }
+  // smooth depth toward luma (+ edge boost)
+  const inv=S.invert, L=S.luma, Z=S.zbuf, E=S.edge, eOn=S.edgeOn;
+  for(let i=0;i<Z.length;i++){
+    let target = inv ? 1-L[i] : L[i];
+    if(eOn) target = Math.min(1, target*0.7 + E[i]*0.95);
+    Z[i] += (target-Z[i]) * (S.frozen?1:0.25);
+  }
+
+  // tilt damping + idle sway
+  S.tilt.x += (S.tilt.tx-S.tilt.x)*0.08;
+  S.tilt.y += (S.tilt.ty-S.tilt.y)*0.08;
+  const sway = S.tiltOn?0:0.06;
+  const rx = S.tilt.y*0.45 + Math.sin(t/2600)*sway;
+  const ry = S.tilt.x*0.55 + Math.cos(t/3100)*sway;
+
+  // sweep bar
+  S.sweepY += 0.004; if(S.sweepY>1.25) S.sweepY=-0.25;
+
+  // draw
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#0a0d0b'; ctx.fillRect(0,0,W,H);
+
+  const c=S.cols,r=S.rows;
+  const cellW=W/c, cellH=H/r, base=Math.min(cellW,cellH);
+  const f = W*0.9;                       // focal length
+  const zRange = S.depth*420*S.dpr;      // depth spread
+  const cx=W/2, cy=H/2;
+  const cosY=Math.cos(ry),sinY=Math.sin(ry);
+  const cosX=Math.cos(rx),sinX=Math.sin(rx);
+  S.step++;
+
+  for(let y=0;y<r;y++){
+    const swD = Math.abs(y/r - S.sweepY);
+    const inSweep = swD<0.03;
+    for(let x=0;x<c;x++){
+      const i=y*c+x, d=Z[i], lum=L[i];
+      if(lum<0.06 && d<0.06) continue;     // skip near-black
+      // 3D point
+      let px=(x+0.5)*cellW-cx, py=(y+0.5)*cellH-cy;
+      let pz=(0.5-d)*zRange;
+      // rotate Y then X
+      let X= px*cosY+pz*sinY, Zr=-px*sinY+pz*cosY;
+      let Y= py*cosX-Zr*sinX; Zr=py*sinX+Zr*cosX;
+      const persp=f/(f+Zr);
+      const sx=cx+X*persp, sy=cy+Y*persp;
+      if(sx<-CELL||sy<-CELL||sx>W+CELL||sy>H+CELL) continue;
+
+      // glyph: rotor wiring keyed by position + global step (re-keys in sweep)
+      const k = inSweep ? S.step*3 : (S.step>>4);
+      const li = ROTOR_I.charCodeAt((x*7+y*3+k)%26)-65;
+      let tier = Math.min(TIERS-1, (d*TIERS)|0);
+      if(inSweep) tier=Math.min(TIERS-1,tier+1);
+      const sz = base*(0.55+d*0.75)*persp;
+      ctx.drawImage(atlas, li*CELL,tier*CELL,CELL,CELL,
+                    sx-sz/2, sy-sz/2, sz, sz);
+    }
+  }
+
+  // sweep line (subtle)
+  const sl=S.sweepY*H;
+  if(sl>0&&sl<H){
+    const g=ctx.createLinearGradient(0,sl-30*S.dpr,0,sl+30*S.dpr);
+    g.addColorStop(0,'rgba(121,165,137,0)');
+    g.addColorStop(0.5,'rgba(121,165,137,0.06)');
+    g.addColorStop(1,'rgba(121,165,137,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,sl-30*S.dpr,W,60*S.dpr);
+  }
+
+  stepRotors(t);
+
+  // fps
+  S.frames++;
+  if(t-S.fT>1000){
+    stFps.textContent=S.frames; S.frames=0; S.fT=t;
+  }
+}
+
+/* ---------- ui ---------- */
+const $=id=>document.getElementById(id);
+const [btnTilt,stFps,r1,r2,r3,funk] = ['btnTilt','stFps','r1','r2','r3','funk'].map($);
+
+/* ---------- mechanical rotor clicks (WebAudio, very quiet) ---------- */
+let AC=null, nbuf=null;
+function initAudio(){
+  AC = new (window.AudioContext||window.webkitAudioContext)();
+  const len = (AC.sampleRate*0.045)|0;
+  nbuf = AC.createBuffer(1,len,AC.sampleRate);
+  const d = nbuf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3);
+}
+function click(vol,freq){
+  if(!S.sndOn||!AC) return;
+  const s=AC.createBufferSource(); s.buffer=nbuf;
+  const f=AC.createBiquadFilter(); f.type='bandpass'; f.frequency.value=freq; f.Q.value=5;
+  const g=AC.createGain(); g.gain.value=vol;
+  s.connect(f); f.connect(g); g.connect(AC.destination); s.start();
+}
+
+/* ---------- funkspruch ticker : decrypts in sync with rotors ---------- */
+const MSGS = [
+  'FUNKSPRUCH ERFASST X TIEFENFELD STABIL',
+  'AN ALLE X ROTOREN SYNCHRON X SCAN LAEUFT',
+  'ZIEL IM RASTER X PUNKTWOLKE FIXIERT',
+  'WETTER LUEBECK X SICHT GUT X WIND NULL DREI',
+  'SCHLUESSEL GEWECHSELT X NEUE WALZENLAGE FOLGT',
+];
+let msgI=0, decN=0, msgPause=0;
+function tickFunk(){
+  const m = MSGS[msgI];
+  if(msgPause>0){
+    if(--msgPause===0){ msgI=(msgI+1)%MSGS.length; decN=0; }
+    return;
+  }
+  decN += 2;
+  if(decN>=m.length){ decN=m.length; msgPause=7; }
+  let out='';
+  for(let i=0;i<m.length;i++)
+    out += i<decN ? m[i] : (m[i]===' ' ? ' ' : ROTOR_I[(i*5+S.step)%26]);
+  funk.textContent = out;
+}
+
+/* ---------- snapshot : PNG stamped with rotor key ---------- */
+function snapshot(){
+  const t=document.createElement('canvas'); t.width=cv.width; t.height=cv.height;
+  const c2=t.getContext('2d');
+  c2.fillStyle='#0a0d0b'; c2.fillRect(0,0,t.width,t.height);
+  c2.drawImage(cv,0,0);
+  c2.font=`${12*S.dpr}px ${getComputedStyle(document.body).fontFamily}`;
+  c2.fillStyle='rgba(157,184,166,0.85)';
+  const stamp=`ENIGMA SCAN · ${new Date().toISOString().slice(0,16).replace('T',' ')}Z · WALZEN ${ALPHA[S.rot[0]]} ${ALPHA[S.rot[1]]} ${ALPHA[S.rot[2]]}`;
+  c2.fillText(stamp, 14*S.dpr, t.height-14*S.dpr);
+  t.toBlob(b=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download='enigma-scan-'+Date.now()+'.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  },'image/png');
+  toast('FOTO GESPEICHERT');
+}
+let toastT;
+function toast(msg){
+  const el=$('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),1800);
+}
+
+$('btnStart').onclick = async ()=>{
+  $('gate').classList.add('gone');
+  buildAtlas(); resize();
+  const ok = await startCam();
+  if(!ok){ S.demo=true; toast('NO CAMERA — DEMO FIELD'); }
+  S.running=true;
+};
+$('btnDemo').onclick = ()=>{
+  $('gate').classList.add('gone');
+  buildAtlas(); resize();
+  S.demo=true; S.running=true;
+};
+$('btnFreeze').onclick = e=>{
+  S.frozen=!S.frozen;
+  e.target.classList.toggle('on',S.frozen);
+  e.target.textContent = S.frozen?'LIVE ▸':'FREEZE';
+  toast(S.frozen?'FIELD FROZEN — TILT TO ORBIT':'LIVE FEED');
+};
+btnTilt.onclick = ()=> S.tiltOn ? (removeEventListener('deviceorientation',onOrient),
+  S.tiltOn=false, btnTilt.classList.remove('on'), toast('TILT OFF')) : enableTilt();
+$('btnInvert').onclick = e=>{
+  S.invert=!S.invert; e.target.classList.toggle('on',S.invert);
+};
+$('btnDensity').onclick = e=>{
+  S.densityIdx=(S.densityIdx+1)%DENSITY.length;
+  e.target.textContent='RASTER '+DENSITY[S.densityIdx].name.trim();
+  resize();
+};
+$('btnFlip').onclick = async ()=>{
+  if(S.demo){ toast('DEMO MODE — NO CAMERA'); return; }
+  S.facing = S.facing==='environment'?'user':'environment';
+  const ok = await startCam();
+  if(!ok) toast('CAMERA SWITCH FAILED');
+};
+$('depthSl').oninput = e=>{
+  S.depth=e.target.value/100;
+  $('depthVal').textContent=e.target.value;
+};
+$('btnMode').onclick = e=>{
+  S.mode=(S.mode+1)%MODES.length;
+  e.target.textContent='MODUS '+MODES[S.mode];
+  if(atlas) buildAtlas();
+};
+$('btnEdge').onclick = e=>{
+  S.edgeOn=!S.edgeOn;
+  e.target.classList.toggle('on',S.edgeOn);
+  toast(S.edgeOn?'KANTEN VERSTÄRKT':'KANTEN AUS');
+};
+$('btnSound').onclick = e=>{
+  if(!AC) initAudio();
+  if(AC.state==='suspended') AC.resume();
+  S.sndOn=!S.sndOn;
+  e.target.classList.toggle('on',S.sndOn);
+};
+$('btnShot').onclick = ()=>{
+  if(!S.running){ toast('SCAN ZUERST STARTEN'); return; }
+  snapshot();
+};
+
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
